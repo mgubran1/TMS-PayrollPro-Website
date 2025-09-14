@@ -1,0 +1,1290 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Employee {
+  id                   Int      @id @default(autoincrement())
+  name                 String
+  truckUnit            String?
+  trailerNumber        String?
+  driverPercent        Float    @default(0)
+  companyPercent       Float    @default(0)
+  serviceFeePercent    Float    @default(0)
+  
+  // ENHANCED PAYMENT METHODS
+  paymentMethod        String   @default("PERCENTAGE") // PERCENTAGE, PAY_PER_MILE, FLAT_RATE
+  payPerMileRate       Float    @default(0) // Rate per mile when using PAY_PER_MILE method
+  
+  dob                  String?
+  licenseNumber        String?
+  driverType           String   @default("OWNER_OPERATOR")
+  employeeLLC          String?
+  cdlExpiry            String?
+  medicalExpiry        String?
+  status               String   @default("ACTIVE")
+
+  // Enhanced Personal Information
+  email                String?
+  phone                String?
+  address              String?
+  city                 String?
+  state                String?
+  zipCode              String?
+  hireDate             String?
+  emergencyContact     String?
+  emergencyPhone       String?
+
+  // CDL and Compliance
+  cdlClass             String?
+  hazmatEndorsement    Boolean  @default(false)
+  lastDrugTest         String?
+  lastPhysical         String?
+
+  // Performance Metrics (NEW - from Java system)
+  totalMilesDriven     Float    @default(0)
+  safetyScore          Float    @default(100.0)
+  totalLoadsCompleted  Int      @default(0)
+  fuelEfficiencyRating Float    @default(0)
+  onTimeDeliveryRate   Float    @default(100.0)
+  accidentCount        Int      @default(0)
+  violationCount       Int      @default(0)
+  customerRating       Float    @default(5.0)
+
+  // Financial Tracking (NEW - from Java system)
+  totalEarningsYTD     Float    @default(0)
+  totalDeductionsYTD   Float    @default(0)
+  advanceBalance       Float    @default(0)
+  escrowBalance        Float    @default(0)
+  weeklyPayRate        Float    @default(0)
+
+  // Audit and Notes
+  notes                String?
+  createdDate          String?
+  modifiedDate         String?
+  modifiedBy           String?
+
+  // Relations
+  attachments          Attachment[]
+  percentageHistory    PercentageSnapshot[]
+  paymentHistory       PaymentMethodHistory[] // NEW: Track payment method changes
+  audit                AuditEntry[]
+  // loads relation removed to avoid foreign key constraints - handled manually in API
+}
+
+model Attachment {
+  id         Int      @id @default(autoincrement())
+  name       String
+  url        String
+  type       String?
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId Int
+}
+
+model PercentageSnapshot {
+  id                 Int      @id @default(autoincrement())
+  createdAt          DateTime @default(now())
+  driverPercent      Float
+  companyPercent     Float
+  serviceFeePercent  Float
+  note               String?
+  employee           Employee @relation(fields: [employeeId], references: [id])
+  employeeId         Int
+}
+
+model AuditEntry {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  actor      String
+  action     String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId Int
+}
+
+// NEW: Payment Method History for tracking payment method changes
+model PaymentMethodHistory {
+  id                 Int      @id @default(autoincrement())
+  createdAt          DateTime @default(now())
+  effectiveDate      String   // ISO date when this payment method becomes effective
+  endDate            String?  // ISO date when this method ends (null for current)
+  
+  // Payment Method Configuration
+  paymentMethod      String   // PERCENTAGE, PAY_PER_MILE, FLAT_RATE
+  
+  // Percentage Pay fields (used when paymentMethod = "PERCENTAGE")
+  driverPercent      Float    @default(0)
+  companyPercent     Float    @default(0)
+  serviceFeePercent  Float    @default(0)
+  
+  // Pay Per Mile fields (used when paymentMethod = "PAY_PER_MILE")
+  payPerMileRate     Float    @default(0)
+  
+  // Audit fields
+  note               String?
+  createdBy          String?
+  
+  // Relations
+  employee           Employee @relation(fields: [employeeId], references: [id])
+  employeeId         Int
+  
+  @@index([employeeId])
+  @@index([effectiveDate])
+}
+
+// ===== TRUCK MODEL =====
+model Truck {
+  id                      Int      @id @default(autoincrement())
+  number                  String   @unique
+  vin                     String?
+  make                    String?
+  model                   String?
+  year                    Int      @default(0)
+  type                    String?
+  status                  String   @default("ACTIVE") // ACTIVE, MAINTENANCE, AVAILABLE, OUT_OF_SERVICE
+  licensePlate            String?
+  
+  // Compliance and Expiry
+  registrationExpiryDate  String?
+  insuranceExpiryDate     String?
+  nextInspectionDue       String?
+  inspection              String?  // Last inspection date
+  permitNumbers           String?
+  
+  // Assignment
+  driver                  String?  // Assigned driver name
+  assigned                Boolean  @default(false)
+  
+  // Audit
+  createdDate             String?
+  modifiedDate            String?
+  modifiedBy              String?
+  notes                   String?
+  
+  // Relations
+  attachments             TruckAttachment[]
+}
+
+model TruckAttachment {
+  id      Int    @id @default(autoincrement())
+  name    String
+  url     String
+  type    String?
+  truck   Truck  @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  truckId Int
+}
+
+// ===== TRAILER MODEL (Comprehensive) =====
+model Trailer {
+  id                          Int      @id @default(autoincrement())
+  trailerNumber               String   @unique
+  vin                         String?
+  make                        String?
+  model                       String?
+  year                        Int      @default(0)
+  type                        String?
+  status                      String   @default("ACTIVE") // ACTIVE, AVAILABLE, MAINTENANCE, OUT_OF_SERVICE
+  licensePlate                String?
+  registrationExpiryDate      String?
+  currentLocation             String?
+  
+  // Technical Specifications
+  length                      Float    @default(0)
+  width                       Float    @default(0)
+  height                      Float    @default(0)
+  capacity                    Float    @default(0)
+  maxWeight                   Float    @default(0)
+  emptyWeight                 Float    @default(0)
+  axleCount                   Int      @default(2)
+  suspensionType              String?
+  hasThermalUnit              Boolean  @default(false)
+  thermalUnitDetails          String?
+  
+  // Financial and Ownership
+  ownershipType               String   @default("Company") // Company, Leased, Owner-Operator
+  purchasePrice               Float    @default(0)
+  purchaseDate                String?
+  currentValue                Float    @default(0)
+  monthlyLeaseCost            Float    @default(0)
+  leaseDetails                String?
+  leaseAgreementExpiryDate    String?
+  insurancePolicyNumber       String?
+  insuranceExpiryDate         String?
+  
+  // Maintenance
+  odometerReading             Int      @default(0)
+  lastInspectionDate          String?
+  nextInspectionDueDate       String?
+  lastServiceDate             String?
+  nextServiceDueDate          String?
+  currentCondition            String   @default("Good")
+  maintenanceNotes            String?
+  
+  // Usage and Assignment
+  assignedDriver              String?
+  assignedTruck               String?
+  isAssigned                  Boolean  @default(false)
+  currentJobId                String?
+  
+  // Tracking
+  lastUpdated                 String?
+  updatedBy                   String?
+  notes                       String?
+  
+  // Relations
+  attachments                 TrailerAttachment[]
+  // loads relation removed to avoid foreign key constraints - handled manually in API
+}
+
+model TrailerAttachment {
+  id        Int     @id @default(autoincrement())
+  name      String
+  url       String
+  type      String?
+  trailer   Trailer @relation(fields: [trailerId], references: [id], onDelete: Cascade)
+  trailerId Int
+}
+
+// ===== FUEL MANAGEMENT SYSTEM (Complete Implementation) =====
+model FuelTransaction {
+  id                  Int                 @id @default(autoincrement())
+  
+  // Transaction Basic Info
+  cardNumber          String?
+  tranDate            String              // Transaction date (ISO format)
+  tranTime            String?             // Transaction time
+  invoice             String              // Invoice number (required)
+  unit                String?             // Truck unit number
+  driverName          String              // Driver name (linked to employees)
+  odometer            String?             // Odometer reading
+  
+  // Location Information
+  locationName        String?             // Gas station/location name
+  city                String?             // City
+  stateProv           String?             // State or Province
+  
+  // Financial Details
+  fees                Float               @default(0)      // Transaction fees
+  item                String?             // Fuel type (Diesel, Gas, etc.)
+  unitPrice           Float               @default(0)      // Price per unit
+  discPPU             Float               @default(0)      // Discount per unit
+  discCost            Float               @default(0)      // Discount cost
+  qty                 Float               @default(0)      // Quantity purchased
+  discAmt             Float               @default(0)      // Total discount amount
+  discType            String?             // Discount type
+  amt                 Float               @default(0)      // Total amount
+  
+  // System Fields
+  db                  String?             // Database identifier
+  currency            String              @default("USD")  // Currency
+  employeeId          Int                 @default(0)      // Linked employee ID
+  
+  // Audit Fields
+  createdDate         String?
+  modifiedDate        String?
+  modifiedBy          String?
+  
+  // Relations
+  attachments         FuelAttachment[]
+  
+  // Unique constraint to prevent duplicates (matches Java logic)
+  @@unique([invoice, tranDate, locationName, amt], name: "unique_fuel_transaction")
+}
+
+model FuelAttachment {
+  id                  Int                 @id @default(autoincrement())
+  name                String
+  url                 String
+  type                String?
+  fuelTransaction     FuelTransaction     @relation(fields: [fuelTransactionId], references: [id], onDelete: Cascade)
+  fuelTransactionId   Int
+}
+
+model FuelImportConfig {
+  id                  Int                 @id @default(autoincrement())
+  fieldName           String              @unique
+  columnMapping       String              // Expected column header name
+  isActive            Boolean             @default(true)
+  isRequired          Boolean             @default(false)  // Whether this field is required for import
+  description         String?             // Help text for the field
+  createdDate         String?
+  modifiedDate        String?
+}
+
+// ===== LOADS MANAGEMENT SYSTEM (Complete 1:1 Port from Java) =====
+
+// Note: SQLite doesn't support enums, so we use string fields with constraints
+// Load Status Values: BOOKED, ASSIGNED, IN_TRANSIT, DELIVERED, PAID, CANCELLED, PICKUP_LATE, DELIVERY_LATE
+// Location Type Values: PICKUP, DROP  
+// Document Type Values: RATE_CONFIRMATION, BOL, POD, LUMPER, OTHER
+
+// Main Load Entity - Direct port from Load.java
+model Load {
+  id                          Int                 @id @default(autoincrement())
+  
+  // Basic Load Information
+  loadNumber                  String              @unique
+  poNumber                    String?
+  customer                    String              // Customer for pickup location
+  customer2                   String?             // Customer for drop location  
+  billTo                      String?             // Customer to bill for the load
+  
+  // Legacy single location fields (for backward compatibility)
+  pickUpLocation              String?
+  dropLocation                String?
+  pickUpDate                  String?             // ISO date string
+  pickUpTime                  String?             // ISO time string  
+  deliveryDate                String?             // ISO date string
+  deliveryTime                String?             // ISO time string
+  
+  // Parsed location fields
+  pickupCity                  String?
+  pickupState                 String?
+  deliveryCity                String?
+  deliveryState               String?
+  
+  // Driver and Equipment Assignment
+  driverId                    Int                 @default(0)
+  driverName                  String?             // Cached driver name
+  truckUnitSnapshot           String?             // Snapshot of truck unit at load creation
+  trailerId                   Int                 @default(0)
+  trailerNumber               String?             // Cached trailer number
+  
+  // Financial Information
+  status                      String              @default("BOOKED") // LoadStatus: BOOKED, ASSIGNED, IN_TRANSIT, DELIVERED, PAID, CANCELLED, PICKUP_LATE, DELIVERY_LATE
+  grossAmount                 Float               @default(0)
+  driverRate                  Float               @default(0)
+  
+  // ENHANCED PAYMENT CALCULATION FIELDS
+  paymentMethod               String?             // PERCENTAGE, PAY_PER_MILE, FLAT_RATE (snapshot from employee at load creation)
+  calculatedMiles             Float               @default(0) // Auto-calculated miles from zip codes
+  adjustedMiles               Float               @default(0) // Manually adjusted miles (overrides calculated)
+  finalMiles                  Float               @default(0) // Final miles used for payment (calculated or adjusted)
+  payPerMileRate              Float               @default(0) // Rate per mile snapshot for PAY_PER_MILE method
+  paymentCalculatedAt         String?             // ISO timestamp when payment was calculated
+  paymentCalculatedBy         String?             // User who calculated the payment
+  
+  // Additional Information
+  notes                       String?
+  reminder                    String?
+  
+  // Lumper Information
+  hasLumper                   Boolean             @default(false)
+  lumperAmount                Float               @default(0)
+  hasRevisedRateConfirmation  Boolean             @default(false)
+  
+  // Audit Fields
+  createdDate                 String?
+  modifiedDate                String?
+  modifiedBy                  String?
+  
+  // Relations
+  locations                   LoadLocation[]      // Multiple pickup/drop locations
+  documents                   LoadDocument[]      // Associated documents
+  // Note: employee and trailer relations removed to avoid foreign key constraints
+  // These are handled manually in the API using the driverId and trailerId fields
+  
+  // Indexes for performance (matching Java DAO)
+  @@index([loadNumber])
+  @@index([status])
+  @@index([driverId])
+  @@index([trailerId])
+  @@index([deliveryDate])
+}
+
+// LoadLocation Entity - Direct port from LoadLocation.java
+model LoadLocation {
+  id                          Int                 @id @default(autoincrement())
+  loadId                      Int
+  type                        String              @default("PICKUP") // LocationType: PICKUP or DROP
+  sequence                    Int                 @default(1)       // Order of locations
+  
+  // Customer and Address Information
+  customer                    String?
+  address                     String?
+  city                        String?
+  state                       String?
+  
+  // Scheduling Information
+  date                        String?             // ISO date string
+  time                        String?             // ISO time string
+  
+  // Additional Information
+  notes                       String?
+  
+  // Relations
+  load                        Load                @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  
+  // Ensure unique sequence per load per type
+  @@unique([loadId, type, sequence])
+  @@index([loadId])
+  @@index([type])
+}
+
+// LoadDocument Entity - Direct port from LoadDocument inner class
+model LoadDocument {
+  id                          Int                 @id @default(autoincrement())
+  loadId                      Int
+  fileName                    String
+  filePath                    String
+  type                        String              @default("OTHER") // DocumentType: RATE_CONFIRMATION, BOL, POD, LUMPER, OTHER
+  uploadDate                  String?             // ISO date string
+  
+  // File metadata
+  fileSize                    Int                 @default(0)
+  contentType                 String?
+  
+  // Relations
+  load                        Load                @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  
+  @@index([loadId])
+  @@index([type])
+}
+
+// Customer Entity - From Java DAO customers table
+model Customer {
+  id                          Int                 @id @default(autoincrement())
+  name                        String              @unique
+  
+  // Contact Information
+  phone                       String?
+  email                       String?
+  
+  // Audit Fields  
+  createdDate                 String?
+  modifiedDate                String?
+  isActive                    Boolean             @default(true)
+  
+  // Relations
+  addresses                   CustomerAddressBook[]
+  locations                   CustomerLocation[]
+}
+
+// BillingEntity - From Java DAO billing_entities table  
+model BillingEntity {
+  id                          Int                 @id @default(autoincrement())
+  name                        String              @unique
+  
+  // Contact Information
+  phone                       String?
+  email                       String?
+  address                     String?
+  
+  // Audit Fields
+  createdDate                 String?
+  modifiedDate                String?
+  isActive                    Boolean             @default(true)
+}
+
+// CustomerAddressBook - From Java CustomerAddress.java
+model CustomerAddressBook {
+  id                          Int                 @id @default(autoincrement())
+  customerId                  Int
+  customerName                String?             // Cached for performance
+  
+  // Location Information
+  locationName                String?             // Optional name for the location
+  address                     String?
+  city                        String?
+  state                       String?
+  
+  // Default Location Flags
+  isDefaultPickup             Boolean             @default(false)
+  isDefaultDrop               Boolean             @default(false)
+  
+  // Relations
+  customer                    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@index([customerId])
+  @@index([isDefaultPickup])
+  @@index([isDefaultDrop])
+}
+
+// CustomerLocation - From Java CustomerLocation.java
+model CustomerLocation {
+  id                          Int                 @id @default(autoincrement())
+  customerId                  Int
+  locationType                String              // PICKUP or DROP
+  locationName                String?
+  address                     String?
+  city                        String?
+  state                       String?
+  isDefault                   Boolean             @default(false)
+  
+  // Relations  
+  customer                    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@index([customerId])
+  @@index([locationType])
+  @@index([isDefault])
+}
+
+// ===== ENTERPRISE ADDRESS BOOK SYSTEM =====
+model AddressBook {
+  id             Int      @id @default(autoincrement())
+  
+  // Basic Information
+  name           String   // Company/Organization name
+  type           String   // CUSTOMER, BROKER, SHIPPER, CONSIGNEE, VENDOR
+  
+  // Address Information
+  address        String?  // Street address
+  city           String?
+  state          String?
+  zipCode        String?
+  country        String   @default("USA")
+  
+  // Contact Information
+  contactPerson  String?  // Primary contact person
+  phone          String?
+  email          String?
+  fax            String?
+  website        String?
+  
+  // Additional Information
+  notes          String?
+  taxId          String?  // Tax ID/EIN number
+  mcNumber       String?  // MC Number for carriers
+  dotNumber      String?  // DOT Number for carriers
+  
+  // Business Information
+  creditLimit    Float    @default(0)
+  paymentTerms   String?  // NET 30, COD, etc.
+  preferredRate  Float    @default(0)
+  
+  // Status and Metadata
+  isActive       Boolean  @default(true)
+  createdDate    String?
+  modifiedDate   String?
+  modifiedBy     String?
+  
+  // Indexes for performance
+  @@index([name])
+  @@index([type])
+  @@index([city])
+  @@index([state])
+  @@index([isActive])
+  
+  // Unique constraint for name within type
+  @@unique([name, type])
+}
+
+// ===== COMPANY CONFIGURATION FOR PDFs =====
+model CompanyConfig {
+  id                Int      @id @default(autoincrement())
+  
+  // Company Information
+  companyName       String
+  address           String?
+  city              String?
+  state             String?
+  zipCode           String?
+  country           String   @default("USA")
+  
+  // Contact Information
+  phone             String?
+  email             String?
+  website           String?
+  fax               String?
+  
+  // Legal Information
+  mcNumber          String?  // Motor Carrier Number
+  dotNumber         String?  // DOT Number
+  taxId             String?  // Tax ID/EIN
+  
+  // Logo and Branding
+  logoUrl           String?  // Company logo URL
+  primaryColor      String   @default("#047857") // Brand primary color
+  secondaryColor    String   @default("#64748b") // Brand secondary color
+  
+  // PDF Configuration
+  pdfHeaderText     String?  // Custom header text for PDFs
+  pdfFooterText     String?  // Custom footer text for PDFs
+  includeTerms      Boolean  @default(true)
+  defaultTerms      String?  // Default terms and conditions
+  
+  // Email Configuration
+  fromEmail         String?  // Default from email
+  replyToEmail      String?  // Reply-to email
+  emailSignature    String?  // Email signature
+  
+  // Payroll Configuration
+  payrollFrequency        String?  @default("WEEKLY")    // WEEKLY, BI_WEEKLY
+  payrollDayOfWeek        Int?     @default(5)           // 0=Sunday, 1=Monday, ..., 5=Friday
+  autoIncludeCurrentWeek  Boolean  @default(true)        // Auto-include current week loads
+  
+  // System Configuration
+  isActive          Boolean  @default(true)
+  createdDate       String?
+  modifiedDate      String?
+  modifiedBy        String?
+}
+
+// ===== PAYROLL SYSTEM MODELS =====
+
+// PayrollPeriod - Manages payroll periods (weekly, bi-weekly, monthly)
+model PayrollPeriod {
+  id              Int      @id @default(autoincrement())
+  
+  // Period Information
+  periodName      String   // e.g., "Week of 12/04/2025", "December 2025"
+  periodType      String   // WEEKLY, BI_WEEKLY, MONTHLY
+  startDate       String   // ISO date string
+  endDate         String   // ISO date string
+  payDate         String   // When employees get paid
+  
+  // Status Information
+  status          String   @default("DRAFT") // DRAFT, PROCESSING, APPROVED, PAID, CLOSED
+  totalGrossPay   Float    @default(0)
+  totalNetPay     Float    @default(0)
+  totalDeductions Float    @default(0)
+  employeeCount   Int      @default(0)
+  
+  // System Information
+  createdDate     String?
+  processedDate   String?  // When payroll was processed
+  approvedDate    String?  // When payroll was approved
+  paidDate        String?  // When payments were made
+  modifiedDate    String?
+  createdBy       String?
+  approvedBy      String?
+  
+  // Relations
+  // paystubs        Paystub[] // Removed - Paystubs now link to IndividualPayroll
+  
+  // Indexes
+  @@index([startDate])
+  @@index([endDate])  
+  @@index([status])
+  @@index([payDate])
+}
+
+// Paystub - Individual employee paystub for a pay period
+model Paystub {
+  id                Int             @id @default(autoincrement())
+  
+  // Reference Information - Link to Individual Payroll
+  payrollId         Int             @unique  // One-to-one with IndividualPayroll
+  employeeId        Int
+  
+  // Employee Snapshot (copied from payroll for historical accuracy)
+  employeeName      String
+  weekStartDate     String          // Week start date
+  weekEndDate       String          // Week end date
+  payDate           String?         // Pay date
+  
+  // Payment Method Snapshot
+  paymentMethod     String          // PERCENTAGE, PAY_PER_MILE, FLAT_RATE
+  basePayRate       Float           @default(0)   // Rate used for calculation
+  
+  // Earnings Breakdown (copied from payroll)
+  totalMiles        Float           @default(0)
+  totalLoads        Int             @default(0)
+  grossRevenue      Float           @default(0)
+  
+  // Calculated Pay Components
+  basePay           Float           @default(0)   // Base pay from loads
+  bonusAmount       Float           @default(0)
+  overtime          Float           @default(0)
+  reimbursements    Float           @default(0)
+  otherEarnings     Float           @default(0)
+  
+  // Deduction Breakdown
+  totalDeductions   Float           @default(0)   // Total deductions
+  fuelDeductions    Float           @default(0)   // Fuel deductions
+  advanceRepayments Float           @default(0)   // Advance repayments
+  otherDeductions   Float           @default(0)   // Other deductions
+  
+  // Final Calculations
+  grossPay          Float           @default(0)   // Total gross pay
+  netPay            Float           @default(0)   // Final net pay after deductions
+  
+  // Status and Dates
+  status            String          @default("DRAFT") // DRAFT, APPROVED, PAID
+  generatedDate     String?
+  approvedDate      String?
+  paidDate          String?
+  
+  // System Information
+  createdDate       String?
+  modifiedDate      String?
+  createdBy         String?
+  
+  // Relations
+  payroll           IndividualPayroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  deductions        PayrollDeduction[]
+  reimbursementRecords PayrollReimbursement[]
+  adjustments       PayrollAdjustment[]
+  advances          PayrollAdvance[]
+  escrowTransactions PayrollEscrowTransaction[]
+  
+  // Indexes
+  @@index([employeeId])
+  @@index([payrollId])
+  @@index([weekStartDate])
+  @@index([status])
+  @@index([generatedDate])
+}
+
+// PayrollDeduction - Individual deductions (taxes, insurance, etc.)
+model PayrollDeduction {
+  id              Int      @id @default(autoincrement())
+  
+  // Reference Information
+  paystubId       Int
+  
+  // Deduction Details
+  deductionType   String   // FEDERAL_TAX, STATE_TAX, FICA, MEDICARE, INSURANCE, 401K, UNION_DUES, ADVANCE_REPAY, FUEL, ESCROW, OTHER
+  deductionName   String   // Display name
+  description     String?  // Additional details
+  
+  // Calculation
+  calculationType String   // PERCENTAGE, FIXED_AMOUNT, PERCENTAGE_OF_GROSS
+  rate            Float    @default(0)    // Percentage (0.15 = 15%) or fixed amount
+  baseAmount      Float    @default(0)    // Amount this deduction is calculated from
+  deductedAmount  Float    @default(0)    // Final deducted amount
+  
+  // Tax Information (for tax deductions)
+  taxYear         Int?     // Tax year if applicable
+  isPreTax        Boolean  @default(false) // Pre-tax deduction (like 401k)
+  
+  // Enhanced Information from Java system
+  category        String   @default("DEDUCTION") // DEDUCTION or REIMBURSEMENT
+  loadNumber      String?  // For load-specific adjustments
+  referenceNumber String?  // External reference tracking
+  status          String   @default("ACTIVE") // ACTIVE, REVERSED, PENDING, APPROVED, REJECTED
+  
+  // System Information
+  createdDate     String?
+  modifiedDate    String?
+  createdBy       String?
+  
+  // Relations
+  paystub         Paystub  @relation(fields: [paystubId], references: [id], onDelete: Cascade)
+  
+  // Indexes
+  @@index([paystubId])
+  @@index([deductionType])
+  @@index([category])
+  @@index([status])
+  @@index([loadNumber])
+}
+
+// PayrollReimbursement - Reimbursements and bonuses
+model PayrollReimbursement {
+  id              Int      @id @default(autoincrement())
+  
+  // Reference Information
+  paystubId       Int
+  employeeId      Int
+  
+  // Reimbursement Details
+  reimbursementType String // FUEL_REIMBURSEMENT, MAINTENANCE, TOLLS, PERMITS, LOAD_BONUS, SAFETY_BONUS, RETENTION_BONUS, OTHER
+  reimbursementName String // Display name
+  description     String? // Additional details
+  
+  // Amount Information
+  amount          Float   @default(0)    // Reimbursement amount
+  
+  // Load-specific Information
+  loadNumber      String? // For load-specific reimbursements
+  referenceNumber String? // External reference tracking
+  category        String  @default("REIMBURSEMENT") // REIMBURSEMENT, BONUS, ADJUSTMENT
+  
+  // Status and Approval
+  status          String  @default("ACTIVE") // ACTIVE, REVERSED, PENDING, APPROVED, REJECTED
+  approvedBy      String? // Who approved the reimbursement
+  approvedDate    String? // When approved
+  
+  // System Information
+  createdDate     String?
+  modifiedDate    String?
+  createdBy       String?
+  
+  // Relations
+  paystub         Paystub @relation(fields: [paystubId], references: [id], onDelete: Cascade)
+  
+  // Indexes
+  @@index([paystubId])
+  @@index([employeeId])
+  @@index([reimbursementType])
+  @@index([status])
+  @@index([loadNumber])
+}
+
+// IndividualPayroll - Core payroll processing record for employee/week combinations
+model IndividualPayroll {
+  id              Int      @id @default(autoincrement())
+  
+  // Employee and Period Information
+  employeeId      Int
+  employeeName    String   // Snapshot of employee name
+  weekStartDate   String   // Week start date (Monday)
+  weekEndDate     String   // Week end date (Sunday)
+  payDate         String?  // When this payroll will be/was paid
+  
+  // Load Information
+  totalLoads      Int      @default(0)     // Number of loads in this payroll
+  totalMiles      Float    @default(0)     // Total miles driven
+  grossRevenue    Float    @default(0)     // Total gross revenue from loads
+  
+  // Payment Calculation
+  paymentMethod   String?  // Snapshot of payment method used
+  basePayRate     Float    @default(0)     // Base rate (percentage, per mile, etc.)
+  basePay         Float    @default(0)     // Calculated base pay from loads
+  
+  // Additional Earnings
+  bonusAmount     Float    @default(0)     // Total bonuses
+  reimbursements  Float    @default(0)     // Total reimbursements
+  overtime        Float    @default(0)     // Overtime pay
+  otherEarnings   Float    @default(0)     // Other earnings
+  
+  // Deductions
+  totalDeductions Float    @default(0)     // Total deductions
+  fuelDeductions  Float    @default(0)     // Fuel deductions
+  advanceRepayments Float  @default(0)     // Advance repayments
+  otherDeductions Float    @default(0)     // Other deductions
+  
+  // Calculated Totals
+  grossPay        Float    @default(0)     // Total gross pay
+  netPay          Float    @default(0)     // Final net pay
+  
+  // Status and Processing
+  status          String   @default("DRAFT") // DRAFT, CALCULATED, REVIEWED, PROCESSED, PAID
+  isLocked        Boolean  @default(false)  // Prevent changes after processing
+  
+  // Processing Information
+  calculatedDate  String?  // When calculations were performed
+  calculatedBy    String?  // Who performed calculations
+  reviewedDate    String?  // When payroll was reviewed
+  reviewedBy      String?  // Who reviewed the payroll
+  processedDate   String?  // When payroll was processed
+  processedBy     String?  // Who processed the payroll
+  
+  // Notes and Comments
+  notes           String?  // Processing notes
+  
+  // System Information
+  createdDate     String?
+  modifiedDate    String?
+  createdBy       String?
+  
+  // Relations
+  loads           PayrollLoad[]        // Loads included in this payroll
+  adjustments     PayrollAdjustment[]  // Adjustments for this payroll
+  paystub         Paystub?             // Generated paystub
+  fuelIntegrations PayrollFuelIntegration[] // Fuel transactions included in this payroll
+  
+  // Indexes
+  @@index([employeeId])
+  @@index([weekStartDate])
+  @@index([status])
+  @@index([payDate])
+  @@unique([employeeId, weekStartDate]) // One payroll per employee per week
+}
+
+// PayrollLoad - Links loads to individual payroll records
+model PayrollLoad {
+  id                Int      @id @default(autoincrement())
+  
+  // References
+  payrollId         Int
+  loadId            Int      // Reference to original load
+  
+  // Load Snapshot (in case original load is modified/deleted)
+  loadNumber        String
+  grossAmount       Float    @default(0)
+  driverRate        Float    @default(0)
+  finalMiles        Float    @default(0)
+  deliveryDate      String?
+  
+  // Payment Method Snapshot
+  paymentMethod     String?
+  payPerMileRate    Float    @default(0)
+  driverPercent     Float    @default(0)
+  
+  // Status
+  isIncluded        Boolean  @default(true)  // Include in payroll calculations
+  notes             String?  // Any notes about this load
+  
+  // System Information
+  createdDate       String?
+  
+  // Relations
+  payroll           IndividualPayroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  
+  // Indexes
+  @@index([payrollId])
+  @@index([loadId])
+  @@index([loadNumber])
+}
+
+// PayrollAdjustment - Enhanced to link to individual payroll records
+model PayrollAdjustment {
+  id              Int      @id @default(autoincrement())
+  
+  // Reference Information
+  employeeId      Int
+  payrollId       Int?     // Link to individual payroll record
+  paystubId       Int?     // Optional - can be standalone or linked to paystub
+  
+  // Adjustment Details
+  category        String   // DEDUCTION, REIMBURSEMENT, BONUS, CORRECTION
+  adjustmentType  String   // FUEL, MAINTENANCE, INSURANCE, BONUS, CORRECTION, OTHER
+  adjustmentName  String   // Display name
+  description     String?  // Additional details
+  
+  // Amount and Calculation
+  amount          Float    @default(0)    // Adjustment amount (always positive, sign handled by category)
+  isRecurring     Boolean  @default(false) // Is this a recurring adjustment
+  
+  // Date Information
+  effectiveDate   String   // When the adjustment takes effect
+  weekStartDate   String?  // Week start for weekly adjustments
+  
+  // Load-specific Information
+  loadNumber      String?  // For load-specific adjustments
+  referenceNumber String?  // External reference tracking
+  
+  // Status and Approval
+  status          String   @default("ACTIVE") // ACTIVE, REVERSED, PENDING, APPROVED, REJECTED
+  approvedBy      String?  // Who approved the adjustment
+  approvedDate    String?  // When approved
+  reversedBy      String?  // Who reversed the adjustment
+  reversedDate    String?  // When reversed
+  reverseReason   String?  // Reason for reversal
+  
+  // System Information
+  createdDate     String?
+  modifiedDate    String?
+  createdBy       String?
+  
+  // Relations
+  payroll         IndividualPayroll? @relation(fields: [payrollId], references: [id], onDelete: SetNull)
+  paystub         Paystub? @relation(fields: [paystubId], references: [id], onDelete: SetNull)
+  
+  // Indexes
+  @@index([employeeId])
+  @@index([payrollId])
+  @@index([paystubId])
+  @@index([category])
+  @@index([adjustmentType])
+  @@index([status])
+  @@index([effectiveDate])
+  @@index([loadNumber])
+}
+
+// PayrollAdvance - Cash advances against future earnings (Enhanced from Java PayrollAdvances.java)
+model PayrollAdvance {
+  id              Int      @id @default(autoincrement())
+  
+  // Reference Information
+  employeeId      Int
+  paystubId       Int?     // If being repaid in this paystub
+  
+  // Advanced Details (from Java system)
+  advanceId       String   @unique // Unique advance identifier (ADV-timestamp)
+  advanceType     String   // ADVANCE, REPAYMENT, ADJUSTMENT, FORGIVENESS
+  parentAdvanceId String?  // Links repayments to original advance
+  
+  // Advance Details
+  advanceAmount   Float    // Original advance amount (positive)
+  amount          Float    // Transaction amount (negative for repayments)
+  repaidAmount    Float    @default(0)    // Amount already repaid
+  remainingBalance Float   @default(0)    // Outstanding balance
+  
+  // Dates and Scheduling
+  advanceDate     String   // When advance was given
+  weekStartDate   String   // Week start date (Monday)
+  dueDate         String?  // When advance should be repaid
+  firstRepaymentDate String? // First repayment due date
+  lastRepaymentDate  String? // Last repayment due date
+  
+  // Repayment Terms (from Java AdvanceEntry)
+  repaymentType   String   @default("PAYROLL_DEDUCTION") // PAYROLL_DEDUCTION, CASH, CHECK, BANK_TRANSFER, OTHER
+  weeksToRepay    Int      @default(0)    // Number of weeks for repayment
+  weeklyRepayment Float    @default(0)    // Weekly repayment amount
+  
+  // Payment Method (for repayments)
+  paymentMethod   String?  // PAYROLL_DEDUCTION, CASH, CHECK, BANK_TRANSFER, OTHER
+  referenceNumber String?  // Check number, transaction ID, etc.
+  
+  // Status (from Java AdvanceStatus)
+  status          String   @default("ACTIVE") // ACTIVE, COMPLETED, DEFAULTED, FORGIVEN, CANCELLED
+  
+  // Approval and Processing
+  approvedBy      String?
+  approvedDate    String?
+  processedBy     String?  // Who processed the transaction
+  processedDate   String?
+  
+  // Notes and Reason
+  reason          String?  // Reason for advance
+  notes           String?
+  
+  // System Information
+  createdDate     String?
+  modifiedDate    String?
+  createdBy       String?
+  
+  // Relations
+  paystub         Paystub? @relation(fields: [paystubId], references: [id])
+  
+  // Indexes
+  @@index([employeeId])
+  @@index([paystubId])
+  @@index([advanceId])
+  @@index([parentAdvanceId])
+  @@index([advanceType])
+  @@index([status])
+  @@index([advanceDate])
+  @@index([weekStartDate])
+}
+
+// PayrollRecurring - Recurring deductions system (from Java PayrollRecurring.java)
+model PayrollRecurring {
+  id              Int      @id @default(autoincrement())
+  
+  // Reference Information
+  driverId        Int      // Employee ID (using Java naming for compatibility)
+  weekStart       String   // Week start date (Monday)
+  
+  // Deduction Details
+  recurringType   String   // ELD, IFTA, TVC, PARKING, PRE-PASS, OTHER (from Java RECURRING_TYPES)
+  amount          Float    @default(0)    // Deduction amount
+  description     String?  // Additional description
+  
+  // Status and Control
+  isActive        Boolean  @default(true)
+  isRecurring     Boolean  @default(true)
+  
+  // Scheduling
+  frequency       String   @default("WEEKLY") // WEEKLY, BI_WEEKLY, MONTHLY
+  nextDeductionDate String? // Next scheduled deduction
+  endDate         String?  // When recurring deduction ends (null = indefinite)
+  
+  // System Information
+  createdDate     String?
+  modifiedDate    String?
+  createdBy       String?
+  
+  // Indexes
+  @@index([driverId])
+  @@index([weekStart])
+  @@index([recurringType])
+  @@index([isActive])
+  @@index([isRecurring])
+}
+
+// PayrollEscrow - Escrow management system (from Java PayrollEscrow.java)
+model PayrollEscrow {
+  id              Int      @id @default(autoincrement())
+  
+  // Employee Reference
+  employeeId      Int      @unique // One escrow account per employee
+  employeeName    String   // Cached employee name
+  
+  // Escrow Balance Information
+  currentBalance  Float    @default(0)    // Current escrow balance
+  targetAmount    Float    @default(0)    // Target escrow amount
+  weeklyAmount    Float    @default(0)    // Weekly deposit amount
+  
+  // Status and Control
+  isFunded        Boolean  @default(false) // Is escrow fully funded
+  isActive        Boolean  @default(true)  // Is escrow account active
+  
+  // Settings
+  autoDeposit     Boolean  @default(false) // Automatic weekly deposits
+  maxWeeklyDeposit Float   @default(500)   // Maximum weekly deposit
+  minWeeklyDeposit Float   @default(50)    // Minimum weekly deposit
+  targetWeeks     Int      @default(6)     // Target weeks to reach full funding
+  
+  // Dates
+  createdDate     String?
+  modifiedDate    String?
+  lastDepositDate String?  // Last deposit date
+  fullyFundedDate String?  // When escrow became fully funded
+  
+  // System Information
+  createdBy       String?
+  modifiedBy      String?
+  
+  // Relations
+  deposits        PayrollEscrowTransaction[]
+  
+  // Indexes
+  @@index([employeeId])
+  @@index([isActive])
+  @@index([isFunded])
+}
+
+// PayrollEscrowTransaction - Escrow deposit/withdrawal transactions
+model PayrollEscrowTransaction {
+  id              Int      @id @default(autoincrement())
+  
+  // Reference Information
+  escrowId        Int
+  employeeId      Int
+  paystubId       Int?     // If linked to a paystub
+  
+  // Transaction Details
+  transactionType String   // DEPOSIT, WITHDRAWAL, ADJUSTMENT, INTEREST
+  amount          Float    // Transaction amount (positive for deposits, negative for withdrawals)
+  description     String?  // Transaction description
+  
+  // Balance Information
+  balanceBefore   Float    @default(0)    // Balance before transaction
+  balanceAfter    Float    @default(0)    // Balance after transaction
+  
+  // Dates
+  transactionDate String   // When transaction occurred
+  effectiveDate   String   // When transaction takes effect
+  weekStartDate   String?  // Week start if weekly transaction
+  
+  // Authorization
+  authorizedBy    String?  // Who authorized the transaction
+  reason          String?  // Reason for transaction
+  
+  // System Information
+  createdDate     String?
+  createdBy       String?
+  
+  // Relations
+  escrow          PayrollEscrow @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  paystub         Paystub?      @relation(fields: [paystubId], references: [id])
+  
+  // Indexes
+  @@index([escrowId])
+  @@index([employeeId])
+  @@index([paystubId])
+  @@index([transactionType])
+  @@index([transactionDate])
+  @@index([weekStartDate])
+}
+
+// PayrollFuelIntegration - Links fuel transactions to payroll (from Java PayrollFuelTable.java)
+model PayrollFuelIntegration {
+  id                  Int      @id @default(autoincrement())
+  
+  // Reference Information
+  payrollId           Int?     // Link to individual payroll
+  fuelTransactionId   Int      // Link to fuel transaction
+  employeeId          Int
+  
+  // Fuel Transaction Snapshot (for historical accuracy)
+  fuelInvoice         String   // Fuel invoice number
+  fuelAmount          Float    @default(0)    // Fuel amount
+  fuelDate            String   // Fuel transaction date
+  location            String?  // Fuel location
+  
+  // Payroll Integration
+  weekStartDate       String   // Week this fuel applies to
+  isIncluded          Boolean  @default(true)  // Include in payroll calculations
+  deductionAmount     Float    @default(0)     // Amount deducted from pay
+  
+  // Processing Information
+  processedDate       String?  // When included in payroll
+  processedBy         String?  // Who processed the inclusion
+  
+  // System Information
+  createdDate         String?
+  
+  // Relations
+  payroll             IndividualPayroll? @relation(fields: [payrollId], references: [id], onDelete: SetNull)
+  
+  // Indexes
+  @@index([payrollId])
+  @@index([fuelTransactionId])
+  @@index([employeeId])
+  @@index([weekStartDate])
+  @@index([isIncluded])
+  @@unique([fuelTransactionId, weekStartDate]) // Prevent duplicate fuel entries per week
+}
+
+// PayrollHistory - Historical payroll tracking and reporting
+model PayrollHistory {
+  id              Int      @id @default(autoincrement())
+  
+  // Reference Information
+  employeeId      Int
+  employeeName    String   // Employee name snapshot
+  
+  // Period Information
+  periodType      String   // WEEKLY, BI_WEEKLY, MONTHLY
+  weekStartDate   String   // Week start date
+  weekEndDate     String   // Week end date
+  payDate         String   // Pay date
+  
+  // Financial Summary
+  grossPay        Float    @default(0)    // Total gross pay
+  totalDeductions Float    @default(0)    // Total deductions
+  netPay          Float    @default(0)    // Net pay
+  
+  // Load Summary
+  totalLoads      Int      @default(0)    // Number of loads
+  totalMiles      Float    @default(0)    // Total miles
+  averagePayPerMile Float  @default(0)    // Average pay per mile
+  
+  // Payment Method Used
+  paymentMethod   String?  // Payment method snapshot
+  
+  // Status Information
+  payrollStatus   String   // DRAFT, CALCULATED, PROCESSED, PAID
+  paidDate        String?  // When actually paid
+  
+  // System Information
+  createdDate     String?  // When payroll was created
+  processedDate   String?  // When payroll was processed
+  archivedDate    String?  // When moved to history
+  
+  // Indexes
+  @@index([employeeId])
+  @@index([weekStartDate])
+  @@index([payDate])
+  @@index([payrollStatus])
+}
+
+// PayrollSettings - System-wide payroll configuration
+model PayrollSettings {
+  id              Int      @id @default(autoincrement())
+  
+  // Calculation Settings
+  defaultPayFrequency        String   @default("WEEKLY")    // WEEKLY, BI_WEEKLY
+  defaultPayDay              Int      @default(5)           // Day of week for pay (5 = Friday)
+  autoCalculatePayroll       Boolean  @default(true)        // Auto-calculate on load completion
+  autoIncludeCurrentWeek     Boolean  @default(true)        // Auto-include current week loads
+  requireApproval            Boolean  @default(true)        // Require approval before processing
+  
+  // Tax and Deduction Settings
+  federalTaxRate            Float    @default(0.22)        // Default federal tax rate
+  stateTaxRate              Float    @default(0.06)        // Default state tax rate
+  ficaRate                  Float    @default(0.062)       // FICA tax rate
+  medicareRate              Float    @default(0.0145)      // Medicare tax rate
+  
+  // Advance Settings
+  maxAdvanceAmount          Float    @default(5000)        // Maximum advance amount
+  maxAdvanceWeeks           Int      @default(26)          // Maximum weeks for repayment
+  defaultAdvanceWeeks       Int      @default(4)           // Default repayment weeks
+  
+  // Escrow Settings
+  defaultEscrowTarget       Float    @default(3000)        // Default escrow target
+  maxWeeklyEscrowDeposit    Float    @default(500)         // Max weekly escrow deposit
+  minWeeklyEscrowDeposit    Float    @default(50)          // Min weekly escrow deposit
+  escrowTargetWeeks         Int      @default(6)           // Weeks to reach escrow target
+  
+  // Business Rules
+  minNetPayThreshold        Float    @default(300)         // Minimum net pay before warnings
+  maxAutoRepayment          Float    @default(200)         // Maximum automatic advance repayment
+  
+  // System Information
+  isActive                  Boolean  @default(true)
+  createdDate               String?
+  modifiedDate              String?
+  modifiedBy                String?
+  
+  // Indexes
+  @@index([isActive])
+}
